@@ -1,6 +1,6 @@
 library(data.table)
 library(stringr)
-source('utils.R')
+source('post_sampling_tests/utils.R')
 library(equSA)
 
 split <- function(x) {
@@ -47,15 +47,19 @@ source("workflow/scripts/utils/helpers.R")
 # source("/path/in/dockerimage/filetosource.R")
 
 output_filename = snakemake@output[["adjmat"]]
-data_filename = nakemake@output[["seqgraph"]]
+traj_filename = nakemake@output[["seqgraph"]]
 time_filename = snakemake@output[["time"]]
+data_filename <- snakemake@input[["data"]]
 
-## Loading data
-## all.files = dir('../graphs/', full.names=TRUE)
+## local testing
+## traj_filename = "graphs//adjvec_1_0.1_random.csv"
+## data_filename = "graphs//seed_1_0.1_random.csv"
+## all.files = dir('graphs/', full.names=TRUE)
 ## get_graph_filenames('0.1_random')
 ## data =get_graph_data('0.1_random')
 ## true_graph = data[[1]]
 ## dt = data[[2]]
+
 
 myalg <- function() {
     # The algorithm should be in this function.
@@ -63,16 +67,18 @@ myalg <- function() {
     start <- proc.time()[1]
 
     ## extract codes
-    data <- read.csv(data_filename, check.names = FALSE)
+    data <- read.csv(traj_filename, check.names = FALSE)
     data = data.table(data)
     codes = data$code[1]
     codes = drop(sapply(str_split(str_sub(codes, 2,-2), '-'), as.numeric))
     data = data[-c(1:3), ]
     colnames(data)<-c('index', 'score', 'added', 'removed', 'code', 'delta', 'm')
+        
     n = nrow(data)
-    p = ncol(data)
-
-    #data = data[code %in% c(0,9,5)][m>0]
+    input_data = read.csv(file = data_filename, header=TRUE, nrows = 1)
+    p = ncol(input_data)
+    
+    ## data = data[code %in% c(0,9,5)][m>0]
     ## 9 failed disconnect, 5 failed connect, 0 success One-pair JT sampler
     ## 6 faild connection, 4 fails disconnection, 0 sucess, Guidici Green
     data = data[code %in% codes][m>0]
@@ -103,7 +109,7 @@ myalg <- function() {
     q = data_treat[, pcorselR(cbind(orig, dest, zt), ALPHA2=0.05, GRID=2, iteration=100)]
     data_treat[, est_edge := 1*(zt>=q)]
 
-    
+        
     adjmat <- matrix(0, nrow = p, ncol = p)
     ed = data_treat[est_edge==1][, cbind(orig+1, dest+1)]
     adjmat[ed] <- 1
@@ -112,7 +118,7 @@ myalg <- function() {
     diag(adjmat) <- 0
         
     totaltime <- proc.time()[1] - start
-    colnames(adjmat) <- names(data) # Get the labels from the data
+    colnames(adjmat) <- names(input_data) # Get the labels from the data
     write.csv(adjmat, file = output_filename, row.names = FALSE, quote = FALSE)
     write(totaltime, file = time_filename)
     # Write the true number of c.i. tests here if possible.
